@@ -233,3 +233,39 @@ func TestIsValidID(t *testing.T) {
 		}
 	}
 }
+
+// TestIndexRebuildOnRestart verifies that files uploaded before a restart are
+// still accessible after the store is re-created (index rebuilt from disk).
+func TestIndexRebuildOnRestart(t *testing.T) {
+	dir := t.TempDir()
+
+	// First store: upload a file.
+	store1, err := NewFileStore(dir, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("NewFileStore: %v", err)
+	}
+	srv1 := NewServer(store1, 10<<20)
+	result := uploadFile(t, srv1, "persist.txt", "persistent content")
+	id := result["id"].(string)
+	downloadURL := result["download_url"].(string)
+
+	// Second store using the same dir: simulates a server restart.
+	store2, err := NewFileStore(dir, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("NewFileStore (restart): %v", err)
+	}
+	srv2 := NewServer(store2, 10<<20)
+
+	req := httptest.NewRequest(http.MethodGet, downloadURL, nil)
+	w := httptest.NewRecorder()
+	srv2.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("download after restart: expected 200, got %d (id=%s)", w.Code, id)
+	}
+	body, _ := io.ReadAll(w.Result().Body)
+	if string(body) != "persistent content" {
+		t.Errorf("content mismatch after restart: got %q", string(body))
+	}
+}
+
