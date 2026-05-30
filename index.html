@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Transfer - tmpfiles.org</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+    .container { max-width: 860px; margin: 0 auto; padding: 32px 20px; }
+
+    header { text-align: center; margin-bottom: 32px; }
+    header h1 { font-size: 22px; font-weight: 600; color: #fff; }
+    header p { font-size: 13px; color: #888; margin-top: 6px; }
+    header a { color: #6aa6ff; text-decoration: none; }
+    header a:hover { text-decoration: underline; }
+
+    .upload-zone {
+      border: 2px dashed #333;
+      border-radius: 12px;
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #1a1a1a;
+      margin-bottom: 24px;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: #6aa6ff;
+      background: #1a2233;
+    }
+    .upload-zone .icon { font-size: 36px; margin-bottom: 8px; opacity: 0.5; }
+    .upload-zone p { color: #999; font-size: 14px; }
+    .upload-zone .hint { font-size: 12px; color: #666; margin-top: 6px; }
+    .upload-zone input { display: none; }
+
+    .progress-bar {
+      display: none;
+      margin-bottom: 24px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .progress-bar.active { display: block; }
+    .progress-track {
+      height: 4px;
+      background: #333;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #6aa6ff;
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .progress-text { font-size: 12px; color: #888; margin-top: 8px; }
+
+    .file-list {
+      background: #1a1a1a;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .file-list-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid #2a2a2a;
+      font-size: 13px;
+      font-weight: 600;
+      color: #aaa;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .file-count { font-weight: 400; color: #666; }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 20px;
+      border-bottom: 1px solid #222;
+      transition: background 0.15s;
+    }
+    .file-item:last-child { border-bottom: none; }
+    .file-item:hover { background: #222; }
+
+    .file-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+    .file-icon.img { background: #1a3320; color: #4caf50; }
+    .file-icon.pdf { background: #331a1a; color: #e53935; }
+    .file-icon.doc { background: #1a2233; color: #4a90d9; }
+    .file-icon.txt { background: #2a1a33; color: #b39ddb; }
+    .file-icon.other { background: #2a2a2a; color: #888; }
+
+    .file-info { flex: 1; min-width: 0; }
+    .file-name {
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #ddd;
+    }
+    .file-meta { font-size: 11px; color: #666; margin-top: 2px; }
+    .file-meta a { color: #6aa6ff; text-decoration: none; }
+    .file-meta a:hover { text-decoration: underline; }
+
+    .file-actions { display: flex; gap: 6px; margin-left: 12px; }
+    .btn {
+      padding: 5px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-copy { background: #2a2a2a; color: #ccc; }
+    .btn-copy:hover { background: #3a3a3a; }
+    .btn-download { background: #1a2233; color: #6aa6ff; }
+    .btn-download:hover { background: #223355; }
+    .btn-delete { background: #2a1a1a; color: #e57373; }
+    .btn-delete:hover { background: #3a2222; }
+
+    .empty {
+      padding: 48px 24px;
+      text-align: center;
+      color: #555;
+      font-size: 14px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #fff;
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.success { background: #2e7d32; }
+    .toast.error { background: #c62828; }
+    .toast.info { background: #37474f; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>File Transfer</h1>
+      <p>Powered by <a href="https://tmpfiles.org/api" target="_blank">tmpfiles.org</a> API &middot; Files expire after ~1 hour</p>
+    </header>
+
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">+</div>
+      <p>Drop files here or click to select</p>
+      <p class="hint">Max ~100MB per file &middot; Temporary storage</p>
+      <input type="file" id="fileInput" multiple>
+    </div>
+
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+
+    <div class="file-list">
+      <div class="file-list-header">
+        <span>Uploaded Files</span>
+        <span class="file-count" id="fileCount"></span>
+      </div>
+      <div id="fileListBody">
+        <div class="empty">No files uploaded yet</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API_UPLOAD = 'https://tmpfiles.org/api/v1/upload';
+    const CORS_PROXY = 'https://corsproxy.io/?';
+    const STORAGE_KEY = 'tmpfiles_history';
+
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const fileListBody = document.getElementById('fileListBody');
+    const fileCount = document.getElementById('fileCount');
+    const toastEl = document.getElementById('toast');
+
+    function showToast(msg, type = 'info') {
+      toastEl.textContent = msg;
+      toastEl.className = 'toast ' + type + ' show';
+      clearTimeout(toastEl._timer);
+      toastEl._timer = setTimeout(() => toastEl.className = 'toast', 3000);
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function getExt(name) {
+      const i = name.lastIndexOf('.');
+      return i > 0 ? name.substring(i + 1).toLowerCase() : '';
+    }
+
+    function getIconClass(name) {
+      const ext = getExt(name);
+      if (['jpg','jpeg','png','gif','webp','svg','bmp','ico','avif'].includes(ext)) return 'img';
+      if (ext === 'pdf') return 'pdf';
+      if (['doc','docx','xls','xlsx','ppt','pptx'].includes(ext)) return 'doc';
+      if (['txt','csv','md','json','xml','html','htm','css','js','ts','log'].includes(ext)) return 'txt';
+      return 'other';
+    }
+
+    function getEmoji(name) {
+      const cls = getIconClass(name);
+      return { img: '\u{1F5BC}', pdf: '\u{1F4D5}', doc: '\u{1F4D6}', txt: '\u{1F4DD}', other: '\u{1F4C1}' }[cls];
+    }
+
+    function pageToDownloadUrl(url) {
+      // https://tmpfiles.org/12345/file.txt -> https://tmpfiles.org/dl/12345/file.txt
+      return url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+    }
+
+    function loadHistory() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      } catch { return []; }
+    }
+
+    function saveHistory(items) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    }
+
+    function renderFiles() {
+      const files = loadHistory();
+      if (files.length === 0) {
+        fileListBody.innerHTML = '<div class="empty">No files uploaded yet</div>';
+        fileCount.textContent = '';
+        return;
+      }
+      fileCount.textContent = files.length + ' file' + (files.length > 1 ? 's' : '');
+      fileListBody.innerHTML = files.map((f, i) => {
+        const cls = getIconClass(f.name);
+        return '<div class="file-item">' +
+          '<div class="file-icon ' + cls + '">' + getEmoji(f.name) + '</div>' +
+          '<div class="file-info">' +
+            '<div class="file-name" title="' + esc(f.name) + '">' + esc(f.name) + '</div>' +
+            '<div class="file-meta">' +
+              (f.size ? formatSize(f.size) + ' &middot; ' : '') +
+              '<a href="' + esc(f.downloadUrl) + '" target="_blank">Direct Link</a>' +
+            '</div>' +
+          '</div>' +
+          '<div class="file-actions">' +
+            '<button class="btn btn-copy" onclick="copyLink(' + i + ')">Copy Link</button>' +
+            '<button class="btn btn-download" onclick="window.open(\'' + esc(f.downloadUrl) + '\',\'_blank\')">Download</button>' +
+            '<button class="btn btn-delete" onclick="removeFile(' + i + ')">Delete</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    function copyLink(i) {
+      const files = loadHistory();
+      const url = files[i]?.downloadUrl;
+      if (!url) return;
+      navigator.clipboard.writeText(url).then(
+        () => showToast('Link copied', 'success'),
+        () => showToast('Copy failed', 'error')
+      );
+    }
+
+    function removeFile(i) {
+      const files = loadHistory();
+      files.splice(i, 1);
+      saveHistory(files);
+      renderFiles();
+    }
+
+    async function uploadFile(file) {
+      const fd = new FormData();
+      fd.append('file', file);
+
+      // Try direct request first, fall back to CORS proxy
+      let res;
+      try {
+        res = await fetch(API_UPLOAD, { method: 'POST', body: fd });
+      } catch {
+        res = await fetch(CORS_PROXY + encodeURIComponent(API_UPLOAD), { method: 'POST', body: fd });
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+
+      const data = await res.json();
+      if (data.status !== 'success' || !data.data?.url) {
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      return {
+        name: file.name,
+        size: file.size,
+        pageUrl: data.data.url,
+        downloadUrl: pageToDownloadUrl(data.data.url),
+        uploadedAt: new Date().toISOString(),
+      };
+    }
+
+    async function uploadFiles(files) {
+      const total = files.length;
+      let done = 0;
+      progressBar.classList.add('active');
+
+      for (const file of files) {
+        progressText.textContent = 'Uploading ' + file.name + ' (' + (done + 1) + '/' + total + ')';
+        progressFill.style.width = ((done / total) * 100) + '%';
+
+        try {
+          const result = await uploadFile(file);
+          const history = loadHistory();
+          history.unshift(result);
+          saveHistory(history);
+        } catch (e) {
+          showToast('Failed: ' + file.name + ' (' + e.message + ')', 'error');
+        }
+        done++;
+      }
+
+      progressFill.style.width = '100%';
+      progressText.textContent = 'Done!';
+      setTimeout(() => {
+        progressBar.classList.remove('active');
+        progressFill.style.width = '0%';
+      }, 1500);
+
+      showToast('Uploaded ' + total + ' file(s)', 'success');
+      renderFiles();
+    }
+
+    // Events
+    uploadZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) uploadFiles([...e.target.files]);
+      fileInput.value = '';
+    });
+
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) uploadFiles([...e.dataTransfer.files]);
+    });
+
+    renderFiles();
+  </script>
+</body>
+</html>
