@@ -1,0 +1,6 @@
+# Build output
+/fileserver
+/*.exe
+
+# Uploaded files (runtime data)
+/uploads/
