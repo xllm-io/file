@@ -16,6 +16,10 @@ var (
 	ErrExpired  = errors.New("file has expired")
 )
 
+// cleanupInterval controls how often the background goroutine scans for and
+// removes expired files.
+const cleanupInterval = 5 * time.Minute
+
 // FileMeta holds metadata about an uploaded file.
 type FileMeta struct {
 	ID          string    `json:"id"`
@@ -148,7 +152,7 @@ func (fs *FileStore) Get(id string) (*FileMeta, io.ReadCloser, error) {
 
 // cleanupLoop periodically removes expired files.
 func (fs *FileStore) cleanupLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 	for range ticker.C {
 		fs.deleteExpired()

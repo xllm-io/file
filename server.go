@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"path"
@@ -164,7 +165,9 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodHead {
 		return
 	}
-	io.Copy(w, rc)
+	if _, err := io.Copy(w, rc); err != nil {
+		log.Printf("download %s: copy error: %v", r.URL.Path, err)
+	}
 }
 
 // handleInfo handles GET /info/{id} – returns JSON metadata for the file.
